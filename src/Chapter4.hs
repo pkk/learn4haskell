@@ -731,15 +731,15 @@ data Tree a
 instance Functor Tree where
     fmap :: (a -> b) -> Tree a -> Tree b
     fmap _ NuEmpty = NuEmpty
-    fmap f (Node x l r) = Node (f x) (fmap f l) (fmap f r)
+    fmap f (Node x tl rr) = Node (f x) (fmap f tl) (fmap f tr)
 
 reverseTree :: Tree a -> Tree a
 reverseTree NuEmpty = NuEmpty
-reverseTree (Node x l r) = Node x (reverseTree r) (reverseTree l)
+reverseTree (Node x tl tr) = Node x (reverseTree tr) (reverseTree tl)
 
 treeToList :: Tree a -> [a]
 treeToList NuEmpty = []
-treeToList (Node x l r) = x : treeToList l ++ treeToList r
+treeToList (Node x tl tr) = x : treeToList tl ++ treeToList tr
 
 {-
 You did it! Now it is time to open pull request with your changes
