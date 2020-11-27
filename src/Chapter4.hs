@@ -114,22 +114,30 @@ As always, try to guess the output first! And don't forget to insert
 the output in here:
 
 >>> :k Char
+Char :: *
 
 >>> :k Bool
+Bool :: *
 
 >>> :k [Int]
+[Int] :: *
 
 >>> :k []
+[] :: * -> *
 
 >>> :k (->)
+(->) :: * -> * -> *
 
 >>> :k Either
+Either :: * -> * -> *
 
 >>> data Trinity a b c = MkTrinity a b c
 >>> :k Trinity
+Trinity :: * -> * -> * -> *
 
 >>> data IntBox f = MkIntBox (f Int)
 >>> :k IntBox
+IntBox :: (* -> *) -> *
 
 -}
 
@@ -293,7 +301,18 @@ values and apply them to the type level?
 -}
 instance Functor (Secret e) where
     fmap :: (a -> b) -> Secret e a -> Secret e b
-    fmap = error "fmap for Box: not implemented!"
+    fmap f (Reward a) = Reward (f a)
+    fmap _ (Trap e) = Trap e
+
+{- 
+@Question how to apply functor if my data is defined as
+  data Secret e a
+    = Reward e
+    | Trap a
+    deriving (Show, Eq)
+  
+  I may not have access to modules
+-}
 
 {- |
 =⚔️= Task 3
@@ -307,6 +326,10 @@ data List a
     = Empty
     | Cons a (List a)
 
+instance Functor List where
+  fmap :: (a -> b) -> List a -> List b
+  fmap _ Empty = Empty
+  fmap f (Cons head tail) = Cons (f head) (fmap f tail)
 {- |
 =🛡= Applicative
 
@@ -472,10 +495,12 @@ Implement the Applicative instance for our 'Secret' data type from before.
 -}
 instance Applicative (Secret e) where
     pure :: a -> Secret e a
-    pure = error "pure Secret: Not implemented!"
+    pure = Reward
+    -- nice eta reduced without type a
 
     (<*>) :: Secret e (a -> b) -> Secret e a -> Secret e b
-    (<*>) = error "(<*>) Secret: Not implemented!"
+    Trap e <*> _ = Trap e
+    Reward f <*> a = fmap f a
 
 {- |
 =⚔️= Task 5
@@ -489,13 +514,26 @@ Implement the 'Applicative' instance for our 'List' type.
   type.
 -}
 
+instance Applicative List where
+  pure :: a -> List a
+  pure x  = Cons x Empty
 
+  (<*>) :: List (a -> b) -> List a -> List b
+  _ <*> Empty = Empty 
+  Empty <*> _ = Empty
+  Cons f as <*> bs = 
+    let
+      app :: List a -> List a -> List a
+      app Empty as = as
+      app (Cons a as) bs = Cons a (app as bs)
+    in
+      app (fmap f bs) (as <*> bs)
 {- |
 =🛡= Monad
 
 Now, the Monad Dragon. We've come that far not to give up. If we
 managed to fight 'Functor' and 'Applicative', then sure, we can beat
-'Monad', right?💪
+'Monad', right?💪t e
 
 As usual, we need to know with whom we are dealing, so let's inspect
 the 'Monad' typeclass definition:
@@ -600,7 +638,8 @@ Implement the 'Monad' instance for our 'Secret' type.
 -}
 instance Monad (Secret e) where
     (>>=) :: Secret e a -> (a -> Secret e b) -> Secret e b
-    (>>=) = error "bind Secret: Not implemented!"
+    Trap e >>= _ =  Trap e
+    Reward a >>= afunc = afunc a
 
 {- |
 =⚔️= Task 7
@@ -611,9 +650,21 @@ Implement the 'Monad' instance for our lists.
   maybe a few) to flatten lists of lists to a single list.
 -}
 
-
-{- |
-=💣= Task 8*: Before the Final Boss
+instance Monad List where
+  (>>=) :: List a -> (a -> List b) -> List b
+  as >>= afunc = 
+    let
+      -- we can extrat this as it is for applicative and can be reused
+      appa :: List a -> List a -> List a
+      appa Empty as = as
+      appa (Cons a as) bs = Cons a (appa as bs) 
+      app :: List (List a) -> List a
+      app Empty = Empty
+      app (Cons a as) = appa a (app as)
+    in
+      app (fmap afunc as)
+{-
+== Task 8*: Before the Final Boss
 
 So far we've been talking only about instances and use cases of
 different typeclasses. But one more cool thing we haven't discussed
@@ -629,7 +680,7 @@ Can you implement a monad version of AND, polymorphic over any monad?
 🕯 HINT: Use "(>>=)", "pure" and anonymous function
 -}
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
-andM = error "andM: Not implemented!"
+andM ma mb = ma >>= \a -> if a then mb else pure False
 
 {- |
 =🐉= Task 9*: Final Dungeon Boss
@@ -673,6 +724,22 @@ Specifically,
  ❃ Implement the function to convert Tree to list
 -}
 
+data Tree a
+    = NuEmpty
+    | Node a (Tree a) (Tree a)
+
+instance Functor Tree where
+    fmap :: (a -> b) -> Tree a -> Tree b
+    fmap _ NuEmpty = NuEmpty
+    fmap f (Node x tl rr) = Node (f x) (fmap f tl) (fmap f tr)
+
+reverseTree :: Tree a -> Tree a
+reverseTree NuEmpty = NuEmpty
+reverseTree (Node x tl tr) = Node x (reverseTree tr) (reverseTree tl)
+
+treeToList :: Tree a -> [a]
+treeToList NuEmpty = []
+treeToList (Node x tl tr) = x : treeToList tl ++ treeToList tr
 
 {-
 You did it! Now it is time to open pull request with your changes
